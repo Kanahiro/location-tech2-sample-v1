@@ -1,0 +1,38 @@
+version: '3'
+services:
+    app:
+        build:
+            context: .
+        platform: linux/amd64
+        ports:
+            - 3000:3000
+        command:
+            - /bin/bash
+            - -c
+            - |
+                exec uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload --reload-dir /app
+        volumes:
+            - .:/app
+        working_dir: /app
+        depends_on:
+            postgis:
+                condition: service_healthy
+    postgis:
+        image: kartoza/postgis:16-3.4
+        environment:
+            - POSTGRES_USER=postgres
+            - POSTGRES_PASS=postgres
+            - POSTGRES_DB=postgres
+        ports:
+            - '5432:5432'
+        volumes:
+            - postgis-data:/var/lib/postgresql
+            - ./postgis-init/:/docker-entrypoint-initdb.d/
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+volumes:
+    postgis-data:
+        driver: local
