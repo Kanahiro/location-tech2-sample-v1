@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Response
 from fastapi.staticfiles import StaticFiles
 import psycopg2
 
 
-from app.model import PoiCreate
+from app.model import PoiCreate, PoiUpdate
 
 app = FastAPI()
 
@@ -145,6 +145,60 @@ def create_poi(data: PoiCreate, conn=Depends(get_connection)):
         },
         "properties": {
             "id": id,
+            "name": name,
+        },
+    }
+
+
+@app.delete("/pois/{id}")
+def delete_poi(id: int, conn=Depends(get_connection)):
+    """
+    PoIテーブルの地物を削除
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM poi WHERE id = %s", (id,))
+        conn.commit()
+
+    return Response(status_code=204)  # 204 No Contentを返す
+
+
+@app.patch("/pois/{poi_id}")
+def update_poi(poi_id: int, data: PoiUpdate, conn=Depends(get_connection)):
+    """
+    PoIテーブルの地物を更新
+    """
+    with conn.cursor() as cur:
+        # 更新対象の地物が存在するか確認
+        cur.execute("SELECT id FROM poi WHERE id = %s", (poi_id,))
+        if not cur.fetchone():
+            return Response(status_code=404)
+
+        # 更新
+        cur.execute(
+            "UPDATE poi SET \
+                name = COALESCE(%s, name), \
+                geom = ST_SetSRID(ST_MakePoint(COALESCE(%s, ST_X(geom)), COALESCE(%s, ST_Y(geom))), 4326) \
+                WHERE id = %s",
+            (data.name, data.longitude, data.latitude, poi_id),
+        )
+        conn.commit()
+
+        # 更新した地物の情報を取得
+        cur.execute(
+            "SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude FROM poi WHERE id = %s",
+            (poi_id,),
+        )
+        _id, name, longitude, latitude = cur.fetchone()
+
+    # 更新した地物をGeoJSONとして返す
+    return {
+        "type": "Feature",
+        "geometry": {
+            "type": "Point",
+            "coordinates": [longitude, latitude],
+        },
+        "properties": {
+            "id": _id,
             "name": name,
         },
     }

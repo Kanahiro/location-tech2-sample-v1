@@ -2,7 +2,7 @@
 <html>
     <head>
         <meta charset="utf-8" />
-        <title>03-01-static-directory</title>
+        <title>05-vector-crud</title>
         <!-- maplibre gl js-->
         <script src="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.js"></script>
         <link
@@ -25,10 +25,6 @@
     <body>
         <div id="map" style="height: 100vh"></div>
         <script>
-            // ベクトルタイルのURL
-            const vectortile =
-                window.location.origin + '/vector/{z}/{x}/{y}.pbf';
-
             const map = new maplibregl.Map({
                 hash: true,
                 container: 'map', // container id
@@ -43,10 +39,12 @@
                             tileSize: 256,
                             attribution: '地理院タイル',
                         },
-                        vectortile: {
-                            type: 'vector',
-                            tiles: [vectortile],
-                            attribution: '国土数値情報 - 学校データ',
+                        poi: {
+                            type: 'geojson',
+                            data: {
+                                type: 'FeatureCollection',
+                                features: [],
+                            },
                         },
                     },
                     layers: [
@@ -56,16 +54,145 @@
                             source: 'gsistd',
                         },
                         {
-                            id: 'vectortile',
+                            id: 'poi',
                             type: 'circle',
-                            source: 'vectortile',
-                            'source-layer': 'vector',
+                            source: 'poi',
                             paint: {
                                 'circle-color': 'red',
+                                'circle-radius': 10,
+                                'circle-stroke-width': 2,
+                                'circle-stroke-color': 'white',
                             },
                         },
                     ],
                 },
+            });
+
+            let popup = null;
+
+            const loadPoi = async () => {
+                // 地図の範囲を取得
+                const bounds = map.getBounds();
+                const minx = bounds.getWest();
+                const miny = bounds.getSouth();
+                const maxx = bounds.getEast();
+                const maxy = bounds.getNorth();
+
+                const response = await fetch(
+                    `http://localhost:3000/pois_sql2?bbox=${minx},${miny},${maxx},${maxy}`,
+                );
+                const data = await response.json();
+                map.getSource('poi').setData(data);
+            };
+
+            const createPoi = async ({ longitude, latitude, name }) => {
+                const response = await fetch('http://localhost:3000/pois', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ longitude, latitude, name }),
+                });
+                await loadPoi();
+                alert('登録しました');
+            };
+
+            const deletePoi = async (id) => {
+                const response = await fetch(
+                    `http://localhost:3000/pois/${id}`,
+                    {
+                        method: 'DELETE',
+                    },
+                );
+                await loadPoi();
+                alert('削除しました');
+            };
+
+            const updatePoi = async (id, name) => {
+                const response = await fetch(
+                    `http://localhost:3000/pois/${id}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ name }),
+                    },
+                );
+                await loadPoi();
+                alert('更新しました');
+            };
+
+            const clearPopup = () => {
+                if (popup) {
+                    popup.remove();
+                    popup = null;
+                }
+            };
+
+            map.on('load', async () => await loadPoi()); // 初期ロード
+            map.on('moveend', async () => await loadPoi()); // マップの移動完了時に画面範囲の地物を取得
+
+            map.on('click', (e) => {
+                if (popup !== null) {
+                    clearPopup();
+                    return;
+                }
+
+                // クリックした位置に地物があるかどうかを取得
+                const features = map.queryRenderedFeatures(e.point, {
+                    layers: ['poi'],
+                });
+
+                if (features.length === 0) {
+                    // クリックした位置に地物がない場合
+                    const longitude = e.lngLat.lng;
+                    const latitude = e.lngLat.lat;
+                    const name = prompt(
+                        'PoIを作成します 名前を入力してください',
+                    );
+                    if (name === null) return;
+                    createPoi({ longitude, latitude, name });
+                } else {
+                    // 地物がある場合
+                    const feature = features[0];
+
+                    // タイトル表示エリア
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.value = feature.properties.name;
+
+                    // 更新ボタン
+                    const updateButton = document.createElement('button');
+                    updateButton.textContent = '更新';
+                    updateButton.onclick = async () => {
+                        await updatePoi(feature.properties.id, nameInput.value);
+                        clearPopup();
+                    };
+
+                    // 削除ボタン
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = '削除';
+                    deleteButton.onclick = async () => {
+                        if (!confirm('削除しますか？')) return;
+                        await deletePoi(feature.properties.id);
+                        clearPopup();
+                    };
+
+                    // ポップアップに表示する要素を作成
+                    const div = document.createElement('div');
+                    div.style = 'display: flex;';
+                    div.appendChild(nameInput);
+                    div.appendChild(updateButton);
+                    div.appendChild(deleteButton);
+
+                    // ポップアップにUIをセットして地図上に表示
+                    popup = new maplibregl.Popup()
+                        .setLngLat(feature.geometry.coordinates)
+                        .setDOMContent(div)
+                        .setMaxWidth('400px')
+                        .addTo(map);
+                }
             });
         </script>
     </body>
