@@ -3,6 +3,8 @@ from fastapi.staticfiles import StaticFiles
 import psycopg2
 
 
+from app.model import PoiCreate
+
 app = FastAPI()
 
 
@@ -107,6 +109,45 @@ def get_pois_sql2(bbox: str, conn=Depends(get_connection)):
         )
         res = cur.fetchall()
     return res[0][0]  # dict型
+
+
+@app.post("/pois")
+def create_poi(data: PoiCreate, conn=Depends(get_connection)):
+    """
+    PoIテーブルに地物を追加
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO poi (name, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))",
+            (data.name, data.longitude, data.latitude),
+        )
+        conn.commit()
+
+        # 作成した地物のIDを取得
+        cur.execute("SELECT lastval()")
+        res = cur.fetchone()
+        _id = res[0]
+
+        # 作成した地物の情報を取得
+        cur.execute(
+            "SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude FROM poi WHERE id = %s",
+            (_id,),
+        )
+        id, name, longitude, latitude = cur.fetchone()
+
+    # 作成した地物をGeoJSONとして返す
+    return {
+        "type": "Feature",
+        "geometry": {
+            "type": "Point",
+            "coordinates": [longitude, latitude],
+        },
+        "properties": {
+            "id": id,
+            "name": name,
+        },
+    }
 
 
 app.mount("/", StaticFiles(directory="static"), name="static")
