@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>06-satellite</title>
+        <!-- maplibre gl js-->
+        <script src="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.js"></script>
+        <link
+            rel="stylesheet"
+            href="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.css"
+        />
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            #map {
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="map" style="height: 100vh"></div>
+        <script>
+            const map = new maplibregl.Map({
+                hash: true,
+                container: 'map', // container id
+                zoom: 9,
+                center: [141.5296, 42.8655],
+                style: {
+                    version: 8,
+                    sources: {
+                        gsistd: {
+                            type: 'raster',
+                            tiles: [
+                                'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+                            ],
+                            tileSize: 256,
+                            attribution: '地理院タイル',
+                        },
+                        raster: {
+                            type: 'raster',
+                            tiles: [
+                                'http://localhost:3000/tiles/{z}/{x}/{y}.png',
+                            ],
+                            tileSize: 256,
+                            attribution:
+                                "Copernicus Sentinel data 2024' for Sentinel data",
+                        },
+                        raster_remote: {
+                            type: 'raster',
+                            tiles: [
+                                'http://localhost:3000/tiles/B02/{z}/{x}/{y}.png',
+                            ],
+                            tileSize: 256,
+                            attribution:
+                                "Copernicus Sentinel data 2024' for Sentinel data",
+                        },
+                    },
+                    layers: [
+                        {
+                            id: 'gsistd',
+                            type: 'raster',
+                            source: 'gsistd',
+                        },
+                        {
+                            id: 'raster',
+                            type: 'raster',
+                            source: 'raster',
+                        },
+                        {
+                            id: 'raster_remote',
+                            type: 'raster',
+                            source: 'raster_remote',
+                        },
+                    ],
+                },
+            });
+            map.showTileBoundaries = true;
+        </script>
+    </body>
+</html>
