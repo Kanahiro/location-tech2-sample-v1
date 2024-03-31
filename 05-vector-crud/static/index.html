@@ -95,6 +95,7 @@
             const mapGeojson = new maplibregl.Map({
                 hash: true,
                 container: 'map-geojson', // container id
+                renderWorldCopies: false,
                 style: {
                     version: 8,
                     sources: {
@@ -152,6 +153,7 @@
             mapGeojson.on('moveend', async () => await loadPoi()); // マップの移動完了時に画面範囲の地物を取得
             mapGeojson.on('click', (e) => {
                 if (popup !== null) {
+                    // ポップアップが表示されている場合は削除するだけ
                     clearPopup();
                     return;
                 }
@@ -219,6 +221,7 @@
             const mapMvt = new maplibregl.Map({
                 hash: true,
                 container: 'map-mvt', // container id
+                renderWorldCopies: false,
                 style: {
                     version: 8,
                     sources: {
