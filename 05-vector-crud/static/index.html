@@ -23,11 +23,78 @@
         </style>
     </head>
     <body>
-        <div id="map" style="height: 100vh"></div>
+        <div style="display: flex">
+            <div style="height: 100vh; width: 50%">
+                MapboxVectorTile
+                <div id="map-mvt" style="height: 95%"></div>
+            </div>
+            <div style="height: 100vh; width: 50%">
+                GeoJSON
+                <div id="map-geojson" style="height: 95%"></div>
+            </div>
+        </div>
         <script>
-            const map = new maplibregl.Map({
+            /**
+             * 共通処理
+             */
+
+            let popup = null; // ポップアップのインスタンスを保持する変数
+
+            const createPoi = async ({ longitude, latitude, name }) => {
+                const response = await fetch('http://localhost:3000/pois', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ longitude, latitude, name }),
+                });
+                await loadPoi();
+                reloadPoi();
+                alert('登録しました');
+            };
+
+            const deletePoi = async (id) => {
+                const response = await fetch(
+                    `http://localhost:3000/pois/${id}`,
+                    {
+                        method: 'DELETE',
+                    },
+                );
+                await loadPoi();
+                reloadPoi();
+                alert('削除しました');
+            };
+
+            const updatePoi = async (id, name) => {
+                const response = await fetch(
+                    `http://localhost:3000/pois/${id}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ name }),
+                    },
+                );
+                await loadPoi();
+                reloadPoi();
+                alert('更新しました');
+            };
+
+            const clearPopup = () => {
+                if (popup) {
+                    popup.remove();
+                    popup = null;
+                }
+            };
+
+            /**
+             * GeoJSONでレスポンスされるエンドポイント向けの実装
+             */
+
+            const mapGeojson = new maplibregl.Map({
                 hash: true,
-                container: 'map', // container id
+                container: 'map-geojson', // container id
                 style: {
                     version: 8,
                     sources: {
@@ -58,7 +125,7 @@
                             type: 'circle',
                             source: 'poi',
                             paint: {
-                                'circle-color': 'red',
+                                'circle-color': 'blue',
                                 'circle-radius': 10,
                                 'circle-stroke-width': 2,
                                 'circle-stroke-color': 'white',
@@ -67,80 +134,30 @@
                     ],
                 },
             });
-
-            let popup = null;
-
             const loadPoi = async () => {
                 // 地図の範囲を取得
-                const bounds = map.getBounds();
-                const minx = bounds.getWest();
-                const miny = bounds.getSouth();
-                const maxx = bounds.getEast();
-                const maxy = bounds.getNorth();
+                const bounds = mapGeojson.getBounds();
+                const minx = Math.max(bounds.getWest(), -179);
+                const miny = Math.max(bounds.getSouth(), -85);
+                const maxx = Math.min(bounds.getEast(), 179);
+                const maxy = Math.min(bounds.getNorth(), 85);
 
                 const response = await fetch(
                     `http://localhost:3000/pois_sql2?bbox=${minx},${miny},${maxx},${maxy}`,
                 );
                 const data = await response.json();
-                map.getSource('poi').setData(data);
+                mapGeojson.getSource('poi').setData(data);
             };
-
-            const createPoi = async ({ longitude, latitude, name }) => {
-                const response = await fetch('http://localhost:3000/pois', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ longitude, latitude, name }),
-                });
-                await loadPoi();
-                alert('登録しました');
-            };
-
-            const deletePoi = async (id) => {
-                const response = await fetch(
-                    `http://localhost:3000/pois/${id}`,
-                    {
-                        method: 'DELETE',
-                    },
-                );
-                await loadPoi();
-                alert('削除しました');
-            };
-
-            const updatePoi = async (id, name) => {
-                const response = await fetch(
-                    `http://localhost:3000/pois/${id}`,
-                    {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ name }),
-                    },
-                );
-                await loadPoi();
-                alert('更新しました');
-            };
-
-            const clearPopup = () => {
-                if (popup) {
-                    popup.remove();
-                    popup = null;
-                }
-            };
-
-            map.on('load', async () => await loadPoi()); // 初期ロード
-            map.on('moveend', async () => await loadPoi()); // マップの移動完了時に画面範囲の地物を取得
-
-            map.on('click', (e) => {
+            mapGeojson.on('load', async () => await loadPoi()); // 初期ロード
+            mapGeojson.on('moveend', async () => await loadPoi()); // マップの移動完了時に画面範囲の地物を取得
+            mapGeojson.on('click', (e) => {
                 if (popup !== null) {
                     clearPopup();
                     return;
                 }
 
                 // クリックした位置に地物があるかどうかを取得
-                const features = map.queryRenderedFeatures(e.point, {
+                const features = mapGeojson.queryRenderedFeatures(e.point, {
                     layers: ['poi'],
                 });
 
@@ -191,8 +208,129 @@
                         .setLngLat(feature.geometry.coordinates)
                         .setDOMContent(div)
                         .setMaxWidth('400px')
-                        .addTo(map);
+                        .addTo(mapGeojson);
                 }
+            });
+
+            /**
+             * MVTでレスポンスされるエンドポイント向けの実装
+             */
+
+            const mapMvt = new maplibregl.Map({
+                hash: true,
+                container: 'map-mvt', // container id
+                style: {
+                    version: 8,
+                    sources: {
+                        gsistd: {
+                            type: 'raster',
+                            tiles: [
+                                'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+                            ],
+                            tileSize: 256,
+                            attribution: '地理院タイル',
+                        },
+                        poimvt: {
+                            type: 'vector',
+                            tiles: [
+                                'http://localhost:3000/pois/tiles/{z}/{x}/{y}.pbf',
+                            ],
+                        },
+                    },
+                    layers: [
+                        {
+                            id: 'gsistd',
+                            type: 'raster',
+                            source: 'gsistd',
+                        },
+                        {
+                            id: 'poi',
+                            type: 'circle',
+                            source: 'poimvt',
+                            'source-layer': 'poi',
+                            paint: {
+                                'circle-color': 'red',
+                                'circle-radius': 10,
+                                'circle-stroke-width': 2,
+                                'circle-stroke-color': 'white',
+                            },
+                        },
+                    ],
+                },
+            });
+            const reloadPoi = () => {
+                const source = mapMvt.getSource('poimvt');
+                // タイルを最読み込みするために、タイルURLを再設定する
+                source.setTiles([
+                    'http://localhost:3000/pois/tiles/{z}/{x}/{y}.pbf',
+                ]);
+            };
+            mapMvt.on('click', (e) => {
+                if (popup !== null) {
+                    clearPopup();
+                    return;
+                }
+
+                // クリックした位置に地物があるかどうかを取得
+                const features = mapMvt.queryRenderedFeatures(e.point, {
+                    layers: ['poi'],
+                });
+
+                if (features.length === 0) {
+                    // クリックした位置に地物がない場合
+                    const longitude = e.lngLat.lng;
+                    const latitude = e.lngLat.lat;
+                    const name = prompt(
+                        'PoIを作成します 名前を入力してください',
+                    );
+                    if (name === null) return;
+                    createPoi({ longitude, latitude, name });
+                } else {
+                    // 地物がある場合
+                    const feature = features[0];
+
+                    // タイトル表示エリア
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.value = feature.properties.name;
+
+                    // 更新ボタン
+                    const updateButton = document.createElement('button');
+                    updateButton.textContent = '更新';
+                    updateButton.onclick = async () => {
+                        await updatePoi(feature.properties.id, nameInput.value);
+                        clearPopup();
+                    };
+
+                    // 削除ボタン
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = '削除';
+                    deleteButton.onclick = async () => {
+                        if (!confirm('削除しますか？')) return;
+                        await deletePoi(feature.properties.id);
+                        clearPopup();
+                    };
+
+                    // ポップアップに表示する要素を作成
+                    const div = document.createElement('div');
+                    div.style = 'display: flex;';
+                    div.appendChild(nameInput);
+                    div.appendChild(updateButton);
+                    div.appendChild(deleteButton);
+
+                    // ポップアップにUIをセットして地図上に表示
+                    popup = new maplibregl.Popup()
+                        .setLngLat(feature.geometry.coordinates)
+                        .setDOMContent(div)
+                        .setMaxWidth('400px')
+                        .addTo(mapMvt);
+                }
+            });
+
+            // 連動処理
+            mapGeojson.on('move', () => {
+                mapMvt.panTo(mapGeojson.getCenter(), { duration: 0 });
+                mapMvt.setZoom(mapGeojson.getZoom());
             });
         </script>
     </body>

@@ -84,7 +84,7 @@ def get_pois_sql2(bbox: str, conn=Depends(get_connection)):
 
     # クエリパラメータbboxの値をチェック
     _bbox = bbox.split(",")
-    if len(_bbox) != 4 or not all(map(lambda x: x.replace(".", "").isdigit(), _bbox)):
+    if len(_bbox) != 4:
         raise ValueError(
             "bboxの値が不正です。minx,miny,maxx,maxyの順で指定してください。"
         )
@@ -202,6 +202,29 @@ def update_poi(poi_id: int, data: PoiUpdate, conn=Depends(get_connection)):
             "name": name,
         },
     }
+
+
+@app.get("/pois/tiles/{z}/{x}/{y}.pbf")
+def get_pois_tiles(z: int, x: int, y: int, conn=Depends(get_connection)):
+    """
+    PoIテーブルの地物をMVTとして返す
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "WITH mvtgeom AS ( \
+                SELECT ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%(z)s, %(x)s, %(y)s)) AS geom, id, name \
+                FROM poi \
+                WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s) \
+            ) \
+            SELECT ST_AsMVT(mvtgeom.*, 'poi', 4096, 'geom') \
+            FROM mvtgeom;",
+            {"z": z, "x": x, "y": y},
+        )
+        val = cur.fetchone()[0]
+    # MapboxVectorTileファイルとしてレスポンス
+    return Response(
+        content=val.tobytes(), media_type="application/vnd.mapbox-vector-tile"
+    )
 
 
 app.mount("/", StaticFiles(directory="static"), name="static")
