@@ -95,7 +95,7 @@ def get_pois_sql2(bbox: str, conn=Depends(get_connection)):
         cur.execute(
             "SELECT json_build_object(\
                 'type', 'FeatureCollection',\
-                'features', COALESCE(json_agg(ST_AsGeoJSON(poi.*)::json), '[]')\
+                'features', COALESCE(json_agg(ST_AsGeoJSON(poi.*)::json), '[]':json)\
             )\
             FROM poi \
             WHERE geom && ST_MakeEnvelope(%(minx)s, %(miny)s, %(maxx)s, %(maxy)s, 4326)\
