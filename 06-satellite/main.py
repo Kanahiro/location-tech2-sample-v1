@@ -85,18 +85,13 @@ def get_tile(
     with Reader(url) as image:
         if not image.tile_exists(x, y, z):
             return None
-        imgdata = image.tile(
-            x,
-            y,
-            z,
-            indexes=indexes,
-        )
+        imgdata = image.tile(x, y, z, indexes=indexes, resampling_method="bilinear")
         imgdata.rescale(((scale_min, scale_max),))
-        png = imgdata.render(img_format="PNG", **img_profiles.get("png"))
+        png = imgdata.render(img_format="WEBP", **img_profiles.get("webp"))
         return png
 
 
-@app.get("/tiles/{z}/{x}/{y}.png")
+@app.get("/tiles/{z}/{x}/{y}.webp")
 async def make_image_remote_cog_tile(
     z: int,
     x: int,
@@ -121,10 +116,10 @@ async def make_image_remote_cog_tile(
         scale_max,
     )
 
-    return Response(png, media_type="image/png")
+    return Response(png, media_type="image/webp")
 
 
-@app.get("/tiles/B02/{z}/{x}/{y}.png")
+@app.get("/tiles/B02/{z}/{x}/{y}.webp")
 async def make_image_remote_b02_tile(
     z: int,
     x: int,
@@ -149,7 +144,7 @@ async def make_image_remote_b02_tile(
         scale_max,
     )
 
-    return Response(png, media_type="image/png")
+    return Response(png, media_type="image/webp")
 
 
 app.mount("/", StaticFiles(directory="static"), name="static")
