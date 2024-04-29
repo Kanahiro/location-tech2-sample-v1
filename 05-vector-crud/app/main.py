@@ -1,18 +1,22 @@
 from fastapi import FastAPI, Depends, Response
 from fastapi.staticfiles import StaticFiles
 import psycopg2
+import psycopg2.pool
 
 
 from app.model import PoiCreate, PoiUpdate
 
 app = FastAPI()
 
+pool = psycopg2.pool.SimpleConnectionPool(
+    dsn="postgresql://postgres:postgres@postgis:5432/postgres", minconn=2, maxconn=4
+)
+
 
 def get_connection():
-    dsn = "postgresql://postgres:postgres@postgis:5432/postgres"
-    conn = psycopg2.connect(dsn)
+    conn = pool.getconn()
     yield conn
-    conn.close()
+    pool.putconn(conn)
 
 
 @app.get("/health")
