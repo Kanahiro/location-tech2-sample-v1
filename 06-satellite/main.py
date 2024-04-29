@@ -85,12 +85,7 @@ def get_tile(
     with Reader(url) as image:
         if not image.tile_exists(x, y, z):
             return None
-        imgdata = image.tile(
-            x,
-            y,
-            z,
-            indexes=indexes,
-        )
+        imgdata = image.tile(x, y, z, indexes=indexes, resampling_method="bilinear")
         imgdata.rescale(((scale_min, scale_max),))
         png = imgdata.render(img_format="PNG", **img_profiles.get("png"))
         return png
