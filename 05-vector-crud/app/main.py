@@ -3,11 +3,9 @@ from fastapi.staticfiles import StaticFiles
 import psycopg2
 import psycopg2.pool
 
-
 from app.model import PoiCreate, PoiUpdate
 
 app = FastAPI()
-
 pool = psycopg2.pool.SimpleConnectionPool(
     dsn="postgresql://postgres:postgres@postgis:5432/postgres", minconn=2, maxconn=4
 )
