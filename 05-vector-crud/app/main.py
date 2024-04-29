@@ -1,16 +1,20 @@
 from fastapi import FastAPI, Depends, Response
 from fastapi.staticfiles import StaticFiles
 import psycopg2
-
+import psycopg2.pool
 
 from app.model import PoiCreate, PoiUpdate
 
 app = FastAPI()
+pool = psycopg2.pool.SimpleConnectionPool(
+    dsn="postgresql://postgres:postgres@postgis:5432/postgres", minconn=2, maxconn=4
+)
 
 
 def get_connection():
-    dsn = "postgresql://postgres:postgres@postgis:5432/postgres"
-    return psycopg2.connect(dsn)
+    conn = pool.getconn()
+    yield conn
+    pool.putconn(conn)
 
 
 @app.get("/health")
@@ -93,13 +97,13 @@ def get_pois_sql2(bbox: str, conn=Depends(get_connection)):
     with conn.cursor() as cur:
         # As Geojson
         cur.execute(
-            "SELECT json_build_object(\
-                'type', 'FeatureCollection',\
-                'features', COALESCE(json_agg(ST_AsGeoJSON(poi.*)::json), '[]':json)\
-            )\
-            FROM poi \
-            WHERE geom && ST_MakeEnvelope(%(minx)s, %(miny)s, %(maxx)s, %(maxy)s, 4326)\
-            LIMIT 1000",
+            """SELECT json_build_object(
+                'type', 'FeatureCollection',
+                'features', COALESCE(json_agg(ST_AsGeoJSON(poi.*)::json), '[]'::json)
+            )
+            FROM poi 
+            WHERE geom && ST_MakeEnvelope(%(minx)s, %(miny)s, %(maxx)s, %(maxy)s, 4326)
+            LIMIT 1000""",
             {
                 "minx": minx,
                 "miny": miny,
@@ -175,10 +179,10 @@ def update_poi(poi_id: int, data: PoiUpdate, conn=Depends(get_connection)):
 
         # 更新
         cur.execute(
-            "UPDATE poi SET \
-                name = COALESCE(%s, name), \
-                geom = ST_SetSRID(ST_MakePoint(COALESCE(%s, ST_X(geom)), COALESCE(%s, ST_Y(geom))), 4326) \
-                WHERE id = %s",
+            """UPDATE poi SET
+                name = COALESCE(%s, name),
+                geom = ST_SetSRID(ST_MakePoint(COALESCE(%s, ST_X(geom)), COALESCE(%s, ST_Y(geom))), 4326)
+                WHERE id = %s""",
             (data.name, data.longitude, data.latitude, poi_id),
         )
         conn.commit()
@@ -211,13 +215,13 @@ def get_pois_tiles(z: int, x: int, y: int, conn=Depends(get_connection)):
     """
     with conn.cursor() as cur:
         cur.execute(
-            "WITH mvtgeom AS ( \
-                SELECT ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%(z)s, %(x)s, %(y)s)) AS geom, id, name \
-                FROM poi \
-                WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s) \
-            ) \
-            SELECT ST_AsMVT(mvtgeom.*, 'poi', 4096, 'geom') \
-            FROM mvtgeom;",
+            """WITH mvtgeom AS (
+                SELECT ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%(z)s, %(x)s, %(y)s)) AS geom, id, name
+                FROM poi
+                WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
+            )
+            SELECT ST_AsMVT(mvtgeom.*, 'poi', 4096, 'geom')
+            FROM mvtgeom;""",
             {"z": z, "x": x, "y": y},
         )
         val = cur.fetchone()[0]
