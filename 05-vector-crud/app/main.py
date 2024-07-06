@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Depends, Response
-from fastapi.staticfiles import StaticFiles
 import psycopg2
 import psycopg2.pool
+from fastapi import Depends, FastAPI, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.model import PoiCreate, PoiUpdate
 
@@ -12,9 +12,11 @@ pool = psycopg2.pool.SimpleConnectionPool(
 
 
 def get_connection():
-    conn = pool.getconn()
-    yield conn
-    pool.putconn(conn)
+    try:
+        conn = pool.getconn()
+        yield conn
+    finally:
+        pool.putconn(conn)
 
 
 @app.get("/health")
