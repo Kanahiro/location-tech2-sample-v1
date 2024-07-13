@@ -1,5 +1,21 @@
 # 位置情報デベロッパー養成講座　サンプルコード集
 
+トピックごとにディレクトリが分かれています。各トピックの実装は、それぞれのディレクトリ内で完結しており、04-01を除き、`docker compose`により起動できるようになっています。
+
+```sh
+# 04-02を起動する例
+cd 04-0２-static-mbtiles
+docker compose up # 起動
+docker compose down # 終了
+```
+
+キャッシュが悪さすることがあるかもしれませんので、適宜、ビルドキャッシュをクリアして進めてください。
+
+```sh
+docker compose build --no-cache
+docker compose up
+```
+
 ## 目次
 
 - [第4章：タイルサーバーの実装 - ディレクトリ形式のタイルを配信する](./04-01-static-directory/)
